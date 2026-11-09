@@ -1,0 +1,56 @@
+name: airbnb_clone # ✅ Nombre cambiado (evita espacios y mayúsculas)
+description: "Aplicación de registro de viviendas estilo Airbnb."
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.4.0
+  flutter_secure_storage: ^9.0.0
+  provider: ^6.1.1
+  intl: ^0.19.0
+  url_launcher: ^6.3.3
+  http: ^1.6.0
+  image_picker: ^1.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  
+  # ✅ Paquetes para personalizar Ícono y Splash Screen
+  flutter_launcher_icons: ^0.13.1 
+  flutter_native_splash: ^2.4.8
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo_app.png
+
+# ==========================================
+# ✅ CONFIGURACIÓN DEL ÍCONO DE LA APP
+# ==========================================
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_app.png"
+  # Opcional: Si quieres un fondo específico para Android adaptativo
+  # adaptive_icon_background: "#ffffff" 
+
+# ==========================================
+# ✅ CONFIGURACIÓN DEL SPLASH SCREEN NATIVO
+# ==========================================
+flutter_native_splash:
+  color: "#ffffff" 
+  image: assets/images/logo_app.png
+  
+  android: true
+  ios: true
+  web: false
+  fullscreen: true

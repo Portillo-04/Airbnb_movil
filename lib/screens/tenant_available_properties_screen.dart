@@ -324,8 +324,6 @@ class _TenantAvailablePropertiesScreenState
     setState(() => _isLoading = true);
     try {
       final data = await _service.obtenerDisponibles();
-
-      // ✅ EXCLUIR PROPIEDADES DEL USUARIO ACTUAL
       final currentUserId = context.read<AuthProvider>().usuario?.id;
 
       if (currentUserId != null) {
@@ -337,7 +335,6 @@ class _TenantAvailablePropertiesScreenState
       }
 
       _applyFilters();
-
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       if (mounted) {
@@ -349,7 +346,6 @@ class _TenantAvailablePropertiesScreenState
     }
   }
 
-  // ✅ FILTRADO EXACTO USANDO LOS NUEVOS CAMPOS DEL BACKEND
   void _applyFilters() {
     List<Propiedad> result = List.from(_allProperties);
 
@@ -361,7 +357,6 @@ class _TenantAvailablePropertiesScreenState
       result = result.where((p) => p.distrito == _selectedDistrict).toList();
     }
 
-    // Ordenar por Precio
     if (_sortBy == 'low_to_high') {
       result.sort((a, b) => a.precioMensual.compareTo(b.precioMensual));
     } else if (_sortBy == 'high_to_low') {
@@ -415,7 +410,6 @@ class _TenantAvailablePropertiesScreenState
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Row(
               children: [
-                // 1. Filtro Departamento (Compacto y sin errores)
                 Flexible(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
@@ -460,10 +454,7 @@ class _TenantAvailablePropertiesScreenState
                     },
                   ),
                 ),
-
                 const SizedBox(width: 2),
-
-                // 2. Filtro Distrito (Compacto y sin errores)
                 Flexible(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
@@ -509,10 +500,7 @@ class _TenantAvailablePropertiesScreenState
                     },
                   ),
                 ),
-
                 const SizedBox(width: 2),
-
-                // 3. Botón Ordenar
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.1),
@@ -527,11 +515,11 @@ class _TenantAvailablePropertiesScreenState
                       color: Colors.white,
                     ),
                     onPressed: () {
-                      setState(() {
-                        _sortBy = _sortBy == 'low_to_high'
+                      setState(
+                        () => _sortBy = _sortBy == 'low_to_high'
                             ? 'high_to_low'
-                            : 'low_to_high';
-                      });
+                            : 'low_to_high',
+                      );
                       _applyFilters();
                     },
                     constraints: const BoxConstraints(
@@ -588,21 +576,53 @@ class _TenantAvailablePropertiesScreenState
                       margin: const EdgeInsets.only(bottom: 16),
                       child: Column(
                         children: [
+                          // ✅ IMAGEN SEGURA: VALIDACIÓN ANTES DE CARGAR
                           ClipRRect(
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(16),
                             ),
-                            child: Image.network(
-                              '${AppConstants.baseUrl}${p.imagenUrl}',
-                              height: 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                height: 180,
-                                color: Colors.indigo.shade100,
-                                child: const Icon(Icons.home, size: 60),
-                              ),
-                            ),
+                            child:
+                                (p.imagenUrl != null && p.imagenUrl!.isNotEmpty)
+                                ? Image.network(
+                                    '${AppConstants.baseUrl}${p.imagenUrl}',
+                                    height: 180,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder:
+                                        (context, child, loadingProgress) {
+                                          if (loadingProgress == null)
+                                            return child;
+                                          return Container(
+                                            height: 180,
+                                            color: Colors.grey[200],
+                                            child: const Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        height: 180,
+                                        color: Colors.grey[200],
+                                        child: Icon(
+                                          Icons.home_outlined,
+                                          size: 60,
+                                          color: Colors.grey[400],
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    height: 180,
+                                    color: Colors.grey[200],
+                                    child: Icon(
+                                      Icons.image_not_supported_outlined,
+                                      size: 60,
+                                      color: Colors.grey[400],
+                                    ),
+                                  ),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(16),
@@ -619,7 +639,6 @@ class _TenantAvailablePropertiesScreenState
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                // ✅ Mostrar ubicación estructurada
                                 Text(
                                   '${p.departamento}, ${p.distrito}',
                                   style: TextStyle(

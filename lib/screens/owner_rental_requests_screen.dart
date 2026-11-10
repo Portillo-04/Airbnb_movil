@@ -7,7 +7,8 @@ class OwnerRentalRequestsScreen extends StatefulWidget {
   const OwnerRentalRequestsScreen({super.key});
 
   @override
-  State<OwnerRentalRequestsScreen> createState() => _OwnerRentalRequestsScreenState();
+  State<OwnerRentalRequestsScreen> createState() =>
+      _OwnerRentalRequestsScreenState();
 }
 
 class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
@@ -25,42 +26,59 @@ class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
   Future<void> _cargarSolicitudes() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _service.obtenerSolicitudes();
-      setState(() => _solicitudes = data);
-      print(' Solicitudes cargadas: ${data.length}');
+      // ✅ CORREGIDO: Nombre del método actualizado en el servicio
+      final data = await _service.obtenerSolicitudesPropietario();
+
+      if (mounted) {
+        setState(() {
+          _solicitudes = data;
+          _isLoading = false;
+        });
+      }
+      print('✅ Solicitudes cargadas: ${data.length}');
     } catch (e) {
       print('❌ Error al cargar solicitudes: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Color _colorEstado(String estado) {
-    switch (estado) {
-      case 'PENDIENTE': return Colors.orange;
-      case 'APROBADA': return Colors.green;
-      case 'RECHAZADA': return Colors.red;
-      case 'POSPUESTA': return Colors.blue;
-      default: return Colors.grey;
+    switch (estado.toUpperCase()) {
+      case 'PENDIENTE':
+        return Colors.orange;
+      case 'APROBADA':
+        return Colors.green;
+      case 'RECHAZADA':
+        return Colors.red;
+      case 'POSPUESTA':
+        return Colors.blue;
+      default:
+        return Colors.grey;
     }
   }
 
   IconData _iconoEstado(String estado) {
-    switch (estado) {
-      case 'PENDIENTE': return Icons.hourglass_empty;
-      case 'APROBADA': return Icons.check_circle;
-      case 'RECHAZADA': return Icons.cancel;
-      case 'POSPUESTA': return Icons.pause_circle;
-      default: return Icons.info;
+    switch (estado.toUpperCase()) {
+      case 'PENDIENTE':
+        return Icons.hourglass_empty;
+      case 'APROBADA':
+        return Icons.check_circle;
+      case 'RECHAZADA':
+        return Icons.cancel;
+      case 'POSPUESTA':
+        return Icons.pause_circle;
+      default:
+        return Icons.info;
     }
   }
 
-  String _formatearFecha(String fecha) {
+  String _formatearFecha(String? fecha) {
+    if (fecha == null) return 'N/A';
     try {
       final date = DateTime.parse(fecha);
       return DateFormat('dd/MM/yyyy').format(date);
@@ -72,10 +90,14 @@ class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
   List<SolicitudAlquiler> get _solicitudesFiltradas {
     if (_filtroEstado == 'TODAS') return _solicitudes;
     if (_filtroEstado == 'PENDIENTES') {
-      return _solicitudes.where((s) => s.estado == 'PENDIENTE').toList();
+      return _solicitudes
+          .where((s) => s.estado?.toUpperCase() == 'PENDIENTE')
+          .toList();
     }
     if (_filtroEstado == 'PROCESADAS') {
-      return _solicitudes.where((s) => s.estado != 'PENDIENTE').toList();
+      return _solicitudes
+          .where((s) => s.estado?.toUpperCase() != 'PENDIENTE')
+          .toList();
     }
     return _solicitudes;
   }
@@ -87,33 +109,28 @@ class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
         solicitud: solicitud,
         nuevoEstado: nuevoEstado,
         onConfirm: (respuesta) async {
-          // Mostrar loading
-          if (mounted) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => const Center(
-                child: CircularProgressIndicator(color: Colors.indigo),
-              ),
-            );
-          }
+          Navigator.pop(context); // Cerrar diálogo primero
 
-          print('🔄 Llamando al servicio para solicitud #${solicitud.id}');
-          print('   Nuevo estado: $nuevoEstado');
-
-          final result = await _service.actualizarEstado(
-            solicitudId: solicitud.id,
-            nuevoEstado: nuevoEstado,
-            respuesta: respuesta,
+          // Mostrar loading global
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const Center(
+              child: CircularProgressIndicator(color: Colors.indigo),
+            ),
           );
 
-          print('📥 Resultado: $result');
+          try {
+            // ✅ CORREGIDO: Llamada al método actualizado del servicio
+            final result = await _service.responderSolicitud(
+              id: solicitud.id!,
+              estado: nuevoEstado,
+              respuesta: respuesta.isNotEmpty ? respuesta : null,
+            );
 
-          // Cerrar loading
-          if (mounted) Navigator.pop(context);
+            if (mounted) Navigator.pop(context); // Cerrar loading
 
-          if (mounted) {
-            if (result['success']) {
+            if (result['success'] == true) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('✅ Solicitud $nuevoEstado exitosamente'),
@@ -123,15 +140,17 @@ class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
               );
               await _cargarSolicitudes();
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('❌ ${result['error'] ?? 'Error al actualizar'}'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 5),
-                ),
-              );
+              throw Exception(result['error']);
             }
+          } catch (e) {
+            if (mounted) Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ ${e.toString()}'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
         },
       ),
@@ -211,207 +230,284 @@ class _OwnerRentalRequestsScreenState extends State<OwnerRentalRequestsScreen> {
               // Lista
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.indigo))
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.indigo),
+                      )
                     : _solicitudesFiltradas.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[300]),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No hay solicitudes ${_filtroEstado == 'TODAS' ? '' : _filtroEstado.toLowerCase()}',
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                                ),
-                              ],
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.inbox_outlined,
+                              size: 80,
+                              color: Colors.grey[300],
                             ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _cargarSolicitudes,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _solicitudesFiltradas.length,
-                              itemBuilder: (context, index) {
-                                final s = _solicitudesFiltradas[index];
-                                final esPendiente = s.estado == 'PENDIENTE';
+                            const SizedBox(height: 16),
+                            Text(
+                              'No hay solicitudes ${_filtroEstado == 'TODAS' ? '' : _filtroEstado.toLowerCase()}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _cargarSolicitudes,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _solicitudesFiltradas.length,
+                          itemBuilder: (context, index) {
+                            final s = _solicitudesFiltradas[index];
+                            final esPendiente =
+                                s.estado?.toUpperCase() == 'PENDIENTE';
 
-                                return Card(
-                                  elevation: 4,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                            return Card(
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                'Solicitud #${s.id}',
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
+                                        Expanded(
+                                          child: Text(
+                                            'Solicitud #${s.id}',
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              decoration: BoxDecoration(
-                                                color: _colorEstado(s.estado),
-                                                borderRadius: BorderRadius.circular(20),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(_iconoEstado(s.estado), color: Colors.white, size: 14),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    s.estado,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          children: [
-                                            Icon(Icons.person, color: Colors.indigo.shade700, size: 20),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Inquilino: ${s.inquilinoNombre ?? "Desconocido"}',
-                                                style: const TextStyle(fontWeight: FontWeight.w500),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          children: [
-                                            Icon(Icons.calendar_today, color: Colors.indigo.shade700, size: 20),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Del ${_formatearFecha(s.fechaInicio)} al ${_formatearFecha(s.fechaFin)}',
-                                                style: TextStyle(color: Colors.grey[700]),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        if (s.respuestaPropietario != null && s.respuestaPropietario!.isNotEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[100],
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.comment, color: Colors.grey[600], size: 20),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    s.respuestaPropietario!,
-                                                    style: TextStyle(color: Colors.grey[700]),
-                                                  ),
-                                                ),
-                                              ],
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _colorEstado(
+                                              s.estado ?? '',
+                                            ).withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
                                             ),
                                           ),
-                                        ],
-                                        // ✅ Solo mostrar botones si está PENDIENTE
-                                        if (esPendiente) ...[
-                                          const SizedBox(height: 16),
-                                          const Divider(),
-                                          const SizedBox(height: 8),
-                                          Row(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Expanded(
-                                                child: ElevatedButton.icon(
-                                                  onPressed: () => _actualizarEstado(s, 'APROBADA'),
-                                                  icon: const Icon(Icons.check),
-                                                  label: const Text('Aceptar'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.green,
-                                                    foregroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                                  ),
+                                              Icon(
+                                                _iconoEstado(s.estado ?? ''),
+                                                color: _colorEstado(
+                                                  s.estado ?? '',
                                                 ),
+                                                size: 14,
                                               ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: ElevatedButton.icon(
-                                                  onPressed: () => _actualizarEstado(s, 'RECHAZADA'),
-                                                  icon: const Icon(Icons.close),
-                                                  label: const Text('Rechazar'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.red,
-                                                    foregroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                s.estado ?? 'N/A',
+                                                style: TextStyle(
+                                                  color: _colorEstado(
+                                                    s.estado ?? '',
                                                   ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: ElevatedButton.icon(
-                                                  onPressed: () => _actualizarEstado(s, 'POSPUESTA'),
-                                                  icon: const Icon(Icons.pause),
-                                                  label: const Text('Posponer'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.blue,
-                                                    foregroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                                  ),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ] else ...[
-                                          // ✅ Mostrar estado procesado sin botones
-                                          const SizedBox(height: 16),
-                                          Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: _colorEstado(s.estado).withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.person,
+                                          color: Colors.indigo.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Inquilino: ${s.inquilinoNombre ?? "Desconocido"}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w500,
                                             ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  _iconoEstado(s.estado),
-                                                  color: _colorEstado(s.estado),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          color: Colors.indigo.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Del ${_formatearFecha(s.fechaInicio)} al ${_formatearFecha(s.fechaFin)}',
+                                            style: TextStyle(
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (s.respuestaPropietario != null &&
+                                        s.respuestaPropietario!.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[100],
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.comment,
+                                              color: Colors.grey[600],
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                s.respuestaPropietario!,
+                                                style: TextStyle(
+                                                  color: Colors.grey[700],
                                                 ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    'Solicitud ${s.estado.toLowerCase()}',
-                                                    style: TextStyle(
-                                                      color: _colorEstado(s.estado),
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (esPendiente) ...[
+                                      const SizedBox(height: 16),
+                                      const Divider(),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: ElevatedButton.icon(
+                                              onPressed: () =>
+                                                  _actualizarEstado(
+                                                    s,
+                                                    'APROBADA',
                                                   ),
-                                                ),
-                                              ],
+                                              icon: const Icon(Icons.check),
+                                              label: const Text('Aceptar'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                foregroundColor: Colors.white,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 12,
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: ElevatedButton.icon(
+                                              onPressed: () =>
+                                                  _actualizarEstado(
+                                                    s,
+                                                    'RECHAZADA',
+                                                  ),
+                                              icon: const Icon(Icons.close),
+                                              label: const Text('Rechazar'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.red,
+                                                foregroundColor: Colors.white,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 12,
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: ElevatedButton.icon(
+                                              onPressed: () =>
+                                                  _actualizarEstado(
+                                                    s,
+                                                    'POSPUESTA',
+                                                  ),
+                                              icon: const Icon(Icons.pause),
+                                              label: const Text('Posponer'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.blue,
+                                                foregroundColor: Colors.white,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 12,
+                                                    ),
+                                              ),
                                             ),
                                           ),
                                         ],
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
+                                      ),
+                                    ] else ...[
+                                      const SizedBox(height: 16),
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: _colorEstado(
+                                            s.estado ?? '',
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _iconoEstado(s.estado ?? ''),
+                                              color: _colorEstado(
+                                                s.estado ?? '',
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Solicitud ${s.estado?.toLowerCase() ?? ''}',
+                                                style: TextStyle(
+                                                  color: _colorEstado(
+                                                    s.estado ?? '',
+                                                  ),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
               ),
             ],
           ),
@@ -444,13 +540,15 @@ class _FiltroChip extends StatelessWidget {
             color: isSelected ? Colors.indigo : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.indigo),
-            boxShadow: isSelected ? [
-              BoxShadow(
-                color: Colors.indigo.withOpacity(0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ] : null,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.indigo.withOpacity(0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Text(
             label,
@@ -496,7 +594,7 @@ class _DialogRespuestaState extends State<_DialogRespuesta> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Inquilino: ${widget.solicitud.inquilinoNombre}',
+              'Inquilino: ${widget.solicitud.inquilinoNombre ?? "Desconocido"}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
